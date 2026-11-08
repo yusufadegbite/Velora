@@ -1,0 +1,581 @@
+// VELORA — data model
+// Money is stored as Decimal(15,2) in whole currency units (NGN by default).
+
+generator client {
+  provider        = "prisma-client-js"
+  previewFeatures = ["relationJoins"]
+}
+
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
+
+// ─── Enums ────────────────────────────────────────────────────────────────
+
+enum Role {
+  CUSTOMER
+  ADMIN
+}
+
+enum VehicleCondition {
+  NEW
+  CERTIFIED_PRE_OWNED
+  FOREIGN_USED
+  LOCAL_USED
+}
+
+enum BodyType {
+  SEDAN
+  SUV
+  COUPE
+  CONVERTIBLE
+  HATCHBACK
+  PICKUP
+  WAGON
+  MINIVAN
+}
+
+enum FuelType {
+  PETROL
+  DIESEL
+  HYBRID
+  PLUG_IN_HYBRID
+  ELECTRIC
+}
+
+enum Transmission {
+  AUTOMATIC
+  MANUAL
+}
+
+enum Drivetrain {
+  FWD
+  RWD
+  AWD
+  FOUR_WD
+}
+
+enum VehicleStatus {
+  AVAILABLE
+  RESERVED
+  SOLD
+  ARCHIVED
+}
+
+enum OrderStatus {
+  PENDING
+  AWAITING_PAYMENT
+  PAYMENT_CONFIRMED
+  PROCESSING
+  COMPLETED
+  CANCELLED
+}
+
+enum PaymentOption {
+  FULL_PAYMENT
+  RESERVATION_DEPOSIT
+  ENQUIRY
+}
+
+enum FulfilmentMethod {
+  DELIVERY
+  COLLECTION
+}
+
+enum PaymentStatus {
+  PENDING
+  SUCCESS
+  FAILED
+  ABANDONED
+  REFUNDED
+}
+
+enum RentalStatus {
+  PENDING
+  CONFIRMED
+  ACTIVE
+  COMPLETED
+  CANCELLED
+  REJECTED
+}
+
+enum AvailabilityBlockType {
+  MAINTENANCE
+  BLOCKED
+  PRIVATE_USE
+}
+
+enum EnquiryType {
+  GENERAL
+  VEHICLE_INFO
+  TEST_DRIVE
+  FINANCING
+  RENTAL
+}
+
+enum EnquiryStatus {
+  NEW
+  IN_PROGRESS
+  RESOLVED
+}
+
+// ─── Identity ─────────────────────────────────────────────────────────────
+
+model User {
+  id            String    @id @default(cuid())
+  email         String    @unique
+  name          String
+  phone         String?
+  passwordHash  String?
+  googleId      String?   @unique
+  avatarUrl     String?
+  role          Role      @default(CUSTOMER)
+  isActive      Boolean   @default(true)
+  emailVerified DateTime?
+  lastLoginAt   DateTime?
+  createdAt     DateTime  @default(now())
+  updatedAt     DateTime  @updatedAt
+
+  sessions       Session[]
+  resetTokens    PasswordResetToken[]
+  wishlist       Wishlist[]
+  comparisons    Comparison[]
+  orders         Order[]
+  rentalBookings RentalBooking[]
+  reviews        Review[]
+  notifications  Notification[]
+  enquiries      ContactEnquiry[]
+  activities     ActivityLog[]
+
+  @@index([role])
+  @@index([createdAt])
+}
+
+model Session {
+  id        String   @id @default(cuid())
+  tokenHash String   @unique
+  userId    String
+  expiresAt DateTime
+  userAgent String?
+  ipAddress String?
+  createdAt DateTime @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+  @@index([expiresAt])
+}
+
+model PasswordResetToken {
+  id        String    @id @default(cuid())
+  tokenHash String    @unique
+  userId    String
+  expiresAt DateTime
+  usedAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId])
+}
+
+// ─── Catalogue ────────────────────────────────────────────────────────────
+
+model VehicleBrand {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  slug        String   @unique
+  country     String?
+  description String?
+  logoUrl     String?
+  heroImage   String?
+  createdAt   DateTime @default(now())
+  updatedAt   DateTime @updatedAt
+
+  vehicles Vehicle[]
+}
+
+model Vehicle {
+  id             String           @id @default(cuid())
+  slug           String           @unique
+  brandId        String
+  model          String
+  trim           String?
+  year           Int
+  price          Decimal          @db.Decimal(15, 2)
+  previousPrice  Decimal?         @db.Decimal(15, 2)
+  mileage        Int
+  transmission   Transmission
+  fuelType       FuelType
+  bodyType       BodyType
+  drivetrain     Drivetrain       @default(AWD)
+  condition      VehicleCondition
+  status         VehicleStatus    @default(AVAILABLE)
+  engine         String
+  engineCapacity Decimal?         @db.Decimal(4, 1)
+  horsepower     Int
+  seats          Int              @default(5)
+  exteriorColor  String
+  interiorColor  String
+  location       String           @default("Lagos")
+  vin            String?          @unique
+  description    String           @db.Text
+  featured       Boolean          @default(false)
+  forSale        Boolean          @default(true)
+  forRent        Boolean          @default(false)
+  dailyRate      Decimal?         @db.Decimal(12, 2)
+  weeklyRate     Decimal?         @db.Decimal(12, 2)
+  monthlyRate    Decimal?         @db.Decimal(12, 2)
+  securityDeposit Decimal?        @db.Decimal(12, 2)
+  viewCount      Int              @default(0)
+  createdAt      DateTime         @default(now())
+  updatedAt      DateTime         @updatedAt
+
+  brand           VehicleBrand           @relation(fields: [brandId], references: [id], onDelete: Restrict)
+  images          VehicleImage[]
+  specifications  VehicleSpecification[]
+  wishlistedBy    Wishlist[]
+  comparisonItems ComparisonItem[]
+  orderItems      OrderItem[]
+  rentalBookings  RentalBooking[]
+  availability    RentalAvailability[]
+  reviews         Review[]
+  enquiries       ContactEnquiry[]
+  promotions      Promotion[]
+
+  @@index([brandId])
+  @@index([status, forSale])
+  @@index([status, forRent])
+  @@index([price])
+  @@index([year])
+  @@index([mileage])
+  @@index([createdAt])
+  @@index([featured])
+  @@index([bodyType])
+  @@index([fuelType])
+  @@index([viewCount])
+}
+
+model VehicleImage {
+  id        String   @id @default(cuid())
+  vehicleId String
+  url       String
+  alt       String?
+  publicId  String?
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, position])
+}
+
+model VehicleSpecification {
+  id        String @id @default(cuid())
+  vehicleId String
+  group     String
+  label     String
+  value     String
+  position  Int    @default(0)
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([vehicleId, label])
+  @@index([vehicleId, group])
+}
+
+// ─── Customer engagement ─────────────────────────────────────────────────
+
+model Wishlist {
+  id        String   @id @default(cuid())
+  userId    String
+  vehicleId String
+  createdAt DateTime @default(now())
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+  @@index([vehicleId])
+}
+
+model Comparison {
+  id        String   @id @default(cuid())
+  userId    String
+  name      String
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user  User             @relation(fields: [userId], references: [id], onDelete: Cascade)
+  items ComparisonItem[]
+
+  @@index([userId])
+}
+
+model ComparisonItem {
+  id           String @id @default(cuid())
+  comparisonId String
+  vehicleId    String
+  position     Int    @default(0)
+
+  comparison Comparison @relation(fields: [comparisonId], references: [id], onDelete: Cascade)
+  vehicle    Vehicle    @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([comparisonId, vehicleId])
+  @@index([vehicleId])
+}
+
+model Review {
+  id        String   @id @default(cuid())
+  userId    String
+  vehicleId String
+  rating    Int
+  title     String
+  body      String   @db.Text
+  approved  Boolean  @default(true)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+
+  user    User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@unique([userId, vehicleId])
+  @@index([vehicleId, approved])
+}
+
+model Notification {
+  id        String    @id @default(cuid())
+  userId    String
+  type      String
+  title     String
+  message   String
+  link      String?
+  readAt    DateTime?
+  createdAt DateTime  @default(now())
+
+  user User @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([userId, readAt])
+  @@index([userId, createdAt])
+}
+
+model ActivityLog {
+  id        String   @id @default(cuid())
+  userId    String?
+  action    String
+  entity    String?
+  entityId  String?
+  detail    String?
+  createdAt DateTime @default(now())
+
+  user User? @relation(fields: [userId], references: [id], onDelete: SetNull)
+
+  @@index([userId, createdAt])
+  @@index([createdAt])
+}
+
+// ─── Commerce ─────────────────────────────────────────────────────────────
+
+model Order {
+  id              String           @id @default(cuid())
+  orderNumber     String           @unique
+  userId          String
+  status          OrderStatus      @default(PENDING)
+  paymentOption   PaymentOption
+  subtotal        Decimal          @db.Decimal(15, 2)
+  amountDue       Decimal          @db.Decimal(15, 2)
+  currency        String           @default("NGN")
+  customerName    String
+  email           String
+  phone           String
+  fulfilment      FulfilmentMethod
+  deliveryAddress String?
+  city            String?
+  state           String?
+  billingName     String
+  billingAddress  String
+  notes           String?
+  adminNote       String?
+  holdExpiresAt   DateTime?
+  cancelledAt     DateTime?
+  cancelReason    String?
+  createdAt       DateTime         @default(now())
+  updatedAt       DateTime         @updatedAt
+
+  user     User        @relation(fields: [userId], references: [id], onDelete: Restrict)
+  items    OrderItem[]
+  payments Payment[]
+
+  @@index([userId, createdAt])
+  @@index([status])
+  @@index([createdAt])
+}
+
+model OrderItem {
+  id        String  @id @default(cuid())
+  orderId   String
+  vehicleId String
+  title     String
+  unitPrice Decimal @db.Decimal(15, 2)
+  quantity  Int     @default(1)
+
+  order   Order   @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([vehicleId])
+}
+
+model Payment {
+  id              String        @id @default(cuid())
+  orderId         String?
+  rentalBookingId String?
+  provider        String        @default("PAYSTACK")
+  reference       String        @unique
+  amount          Decimal       @db.Decimal(15, 2)
+  currency        String
+  status          PaymentStatus @default(PENDING)
+  channel         String?
+  authorizationUrl String?
+  gatewayResponse String?
+  paidAt          DateTime?
+  createdAt       DateTime      @default(now())
+  updatedAt       DateTime      @updatedAt
+
+  order         Order?         @relation(fields: [orderId], references: [id], onDelete: Restrict)
+  rentalBooking RentalBooking? @relation(fields: [rentalBookingId], references: [id], onDelete: Restrict)
+
+  @@index([orderId])
+  @@index([rentalBookingId])
+  @@index([status, createdAt])
+}
+
+// ─── Rentals ──────────────────────────────────────────────────────────────
+
+model RentalBooking {
+  id               String       @id @default(cuid())
+  bookingNumber    String       @unique
+  userId           String
+  vehicleId        String
+  status           RentalStatus @default(PENDING)
+  pickupLocation   String
+  returnLocation   String
+  pickupAt         DateTime
+  returnAt         DateTime
+  days             Int
+  rateType         String
+  rentalCost       Decimal      @db.Decimal(12, 2)
+  extrasCost       Decimal      @db.Decimal(12, 2)
+  securityDeposit  Decimal      @db.Decimal(12, 2)
+  total            Decimal      @db.Decimal(12, 2)
+  extras           String[]
+  customerName     String
+  email            String
+  phone            String
+  driverLicense    String
+  notes            String?
+  adminNote        String?
+  cancelledAt      DateTime?
+  cancelReason     String?
+  createdAt        DateTime     @default(now())
+  updatedAt        DateTime     @updatedAt
+
+  user     User      @relation(fields: [userId], references: [id], onDelete: Restrict)
+  vehicle  Vehicle   @relation(fields: [vehicleId], references: [id], onDelete: Restrict)
+  payments Payment[]
+
+  @@index([userId, createdAt])
+  @@index([vehicleId, pickupAt, returnAt])
+  @@index([status])
+}
+
+model RentalAvailability {
+  id        String                @id @default(cuid())
+  vehicleId String
+  startsAt  DateTime
+  endsAt    DateTime
+  type      AvailabilityBlockType @default(BLOCKED)
+  reason    String?
+  createdAt DateTime              @default(now())
+
+  vehicle Vehicle @relation(fields: [vehicleId], references: [id], onDelete: Cascade)
+
+  @@index([vehicleId, startsAt, endsAt])
+}
+
+// ─── Enquiries & marketing ───────────────────────────────────────────────
+
+model ContactEnquiry {
+  id        String        @id @default(cuid())
+  userId    String?
+  vehicleId String?
+  type      EnquiryType   @default(GENERAL)
+  status    EnquiryStatus @default(NEW)
+  name      String
+  email     String
+  phone     String?
+  subject   String
+  message   String        @db.Text
+  createdAt DateTime      @default(now())
+  updatedAt DateTime      @updatedAt
+
+  user    User?    @relation(fields: [userId], references: [id], onDelete: SetNull)
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([status, createdAt])
+}
+
+model NewsletterSubscription {
+  id             String    @id @default(cuid())
+  email          String    @unique
+  unsubscribedAt DateTime?
+  createdAt      DateTime  @default(now())
+}
+
+model Banner {
+  id        String   @id @default(cuid())
+  eyebrow   String?
+  title     String
+  subtitle  String?
+  imageUrl  String
+  ctaLabel  String?
+  ctaHref   String?
+  active    Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
+
+model Promotion {
+  id          String    @id @default(cuid())
+  title       String
+  description String
+  badge       String?
+  imageUrl    String
+  ctaLabel    String?
+  ctaHref     String?
+  vehicleId   String?
+  active      Boolean   @default(true)
+  startsAt    DateTime?
+  endsAt      DateTime?
+  createdAt   DateTime  @default(now())
+  updatedAt   DateTime  @updatedAt
+
+  vehicle Vehicle? @relation(fields: [vehicleId], references: [id], onDelete: SetNull)
+
+  @@index([active])
+}
+
+model Testimonial {
+  id        String   @id @default(cuid())
+  name      String
+  title     String?
+  quote     String
+  rating    Int      @default(5)
+  avatarUrl String?
+  active    Boolean  @default(true)
+  position  Int      @default(0)
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
+}
